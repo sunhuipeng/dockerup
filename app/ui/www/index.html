@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>服务管理</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="app">
+  <section class="stats" id="stats">
+    <div class="stat-item">
+      <span class="stat-label">项目总数</span>
+      <strong class="stat-value" id="statProjects">—</strong>
+      <span class="stat-sub" id="statProjectsSub">扫描中</span>
+    </div>
+    <div class="stat-sep"></div>
+    <div class="stat-item">
+      <span class="stat-label">运行中容器</span>
+      <strong class="stat-value" id="statRunning">—</strong>
+      <span class="stat-sub" id="statRunningSub">—</span>
+    </div>
+    <div class="stat-sep"></div>
+    <div class="stat-item">
+      <span class="stat-label">Docker 环境</span>
+      <strong class="stat-value stat-value-sm" id="statDocker">—</strong>
+      <span class="stat-sub" id="statDockerSub">—</span>
+    </div>
+    <span class="stat-path" id="basePath">正在加载…</span>
+  </section>
+
+  <section class="toolbar">
+    <div class="search">
+      <svg viewBox="0 0 24 24" class="ico"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M16 16l4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+      <input type="text" id="searchInput" placeholder="搜索项目名称或路径…" autocomplete="off" />
+    </div>
+    <div class="segmented" id="filterGroup">
+      <button class="seg active" data-filter="all">全部</button>
+      <button class="seg" data-filter="running">运行中</button>
+      <button class="seg" data-filter="stopped">未运行</button>
+      <button class="seg" data-filter="invalid">无配置</button>
+    </div>
+    <div class="toolbar-actions">
+      <button class="btn btn-ghost" id="btnRefresh" title="刷新状态">
+        <svg viewBox="0 0 24 24" class="ico"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>刷新</span>
+      </button>
+      <button class="btn btn-ghost" id="btnSettings" title="设置">
+        <svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M12 3v2.2M12 18.8V21M4.2 7.5l1.9 1.1M17.9 15.4l1.9 1.1M4.2 16.5l1.9-1.1M17.9 8.6l1.9-1.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        <span>设置</span>
+      </button>
+      <button class="btn btn-primary" id="btnUpgradeAll">
+        <svg viewBox="0 0 24 24" class="ico"><path d="M12 19V5M12 5l-5.5 5.5M12 5l5.5 5.5" stroke="currentColor" stroke-width="1.9" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>全部升级</span>
+      </button>
+    </div>
+  </section>
+
+  <main class="content">
+    <div class="grid" id="projectGrid"></div>
+    <div class="empty" id="emptyState" hidden></div>
+  </main>
+
+  <footer class="footer">
+    <span id="footerInfo">服务管理</span>
+    <span class="dot-sep">·</span>
+    <span id="footerTime"></span>
+  </footer>
+</div>
+
+<!-- 任务日志面板 -->
+<div class="drawer" id="taskDrawer" hidden>
+  <div class="drawer-head">
+    <div class="drawer-title">
+      <span class="spinner" id="taskSpinner"></span>
+      <div>
+        <strong id="taskTitle">任务</strong>
+        <span class="drawer-sub" id="taskSub"></span>
+      </div>
+    </div>
+    <div class="drawer-actions">
+      <button class="btn btn-ghost btn-sm" id="btnTaskCopy">复制日志</button>
+      <button class="btn btn-ghost btn-sm" id="btnTaskClose">收起</button>
+    </div>
+  </div>
+  <pre class="terminal" id="terminal"></pre>
+</div>
+
+<!-- 设置对话框 -->
+<div class="overlay" id="settingsModal" hidden>
+  <div class="modal">
+    <div class="modal-head">
+      <h2>应用设置</h2>
+      <button class="icon-btn" data-close="settingsModal">×</button>
+    </div>
+    <div class="modal-body">
+      <label class="field">
+        <span class="field-label">Docker 项目根目录</span>
+        <input type="text" id="inputBasePath" placeholder="/vol1/1000/docker" spellcheck="false" />
+        <span class="field-hint">该目录下的一级子文件夹会被识别为 Compose 项目。</span>
+      </label>
+      <div class="detect" id="detectBox"></div>
+      <div class="alert" id="settingsAlert" hidden></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" data-close="settingsModal">取消</button>
+      <button class="btn btn-primary" id="btnSaveSettings">保存并重新扫描</button>
+    </div>
+  </div>
+</div>
+
+<!-- 日志对话框 -->
+<div class="overlay" id="logsModal" hidden>
+  <div class="modal modal-wide">
+    <div class="modal-head">
+      <h2 id="logsTitle">容器日志</h2>
+      <button class="icon-btn" data-close="logsModal">×</button>
+    </div>
+    <div class="modal-body modal-body-flush">
+      <pre class="terminal terminal-light" id="logsContent">加载中…</pre>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" data-close="logsModal">关闭</button>
+      <button class="btn btn-ghost" id="btnReloadLogs">重新加载</button>
+    </div>
+  </div>
+</div>
+
+<!-- 确认对话框 -->
+<div class="overlay" id="confirmModal" hidden>
+  <div class="modal modal-sm">
+    <div class="modal-head">
+      <h2 id="confirmTitle">确认操作</h2>
+      <button class="icon-btn" data-close="confirmModal">×</button>
+    </div>
+    <div class="modal-body">
+      <p id="confirmText" class="confirm-text"></p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" data-close="confirmModal">取消</button>
+      <button class="btn btn-danger" id="confirmOk">确认</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  ".url": {
+    "dockerup.Application": {
+      "title": "服务管理",
+      "icon": "images/icon_{0}.png",
+      "type": "iframe",
+      "protocol": "http",
+      "port": "39190",
+      "url": "/",
+      "allUsers": true
+    }
+  }
+}

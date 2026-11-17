@@ -1,0 +1,9 @@
+#!/bin/bash
+# 卸载后：仅清理运行时遗留文件。
+# 注意：用户配置（settings.json）保存在应用数据目录中，
+# 由系统在「同时删除数据」时统一清理，这里不做删除。
+
+DATA_DIR="${TRIM_PKGVAR:-/var/apps/dockerup/var}"
+rm -f "${DATA_DIR}/app.pid" 2>/dev/null
+
+exit 0

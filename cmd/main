@@ -1,0 +1,149 @@
+#!/bin/bash
+# 服务管理 - 生命周期控制脚本
+# start / stop / status
+
+PORT="${TRIM_SERVICE_PORT:-39190}"
+APP_DIR="${TRIM_APPDEST:-/var/apps/dockerup/target}"
+DATA_DIR="${TRIM_PKGVAR:-/var/apps/dockerup/var}"
+STATIC_DIR="${APP_DIR}/ui/www"
+SERVER="${APP_DIR}/server/server.py"
+PID_FILE="${DATA_DIR}/app.pid"
+LOG_FILE="${DATA_DIR}/service.log"
+
+log_msg() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "${LOG_FILE}" 2>/dev/null
+}
+
+fail() {
+    log_msg "ERROR: $1"
+    if [ -n "${TRIM_TEMP_LOGFILE}" ]; then
+        echo "$1" > "${TRIM_TEMP_LOGFILE}"
+    fi
+    exit 1
+}
+
+find_python() {
+    local p
+    for p in /usr/bin/python3 /usr/local/bin/python3 \
+             /var/apps/python312/target/bin/python3 \
+             /var/apps/python311/target/bin/python3 \
+             /var/apps/python310/target/bin/python3; do
+        if [ -x "$p" ]; then
+            echo "$p"
+            return 0
+        fi
+    done
+    p="$(command -v python3 2>/dev/null)"
+    if [ -n "$p" ]; then
+        echo "$p"
+        return 0
+    fi
+    return 1
+}
+
+is_running() {
+    [ -f "${PID_FILE}" ] || return 1
+    local pid
+    pid="$(tr -d '[:space:]' < "${PID_FILE}" 2>/dev/null)"
+    [ -n "${pid}" ] || return 1
+    kill -0 "${pid}" 2>/dev/null || return 1
+    return 0
+}
+
+port_open() {
+    (exec 3<>"/dev/tcp/127.0.0.1/${PORT}") 2>/dev/null || return 1
+    exec 3<&- 2>/dev/null
+    exec 3>&- 2>/dev/null
+    return 0
+}
+
+start_app() {
+    if is_running; then
+        log_msg "service already running, skip start"
+        return 0
+    fi
+
+    mkdir -p "${DATA_DIR}" || fail "无法创建数据目录：${DATA_DIR}"
+
+    [ -f "${SERVER}" ] || fail "找不到服务程序：${SERVER}"
+    [ -d "${STATIC_DIR}" ] || fail "找不到界面文件目录：${STATIC_DIR}"
+
+    if ! command -v docker >/dev/null 2>&1; then
+        fail "未检测到 docker 命令，请先在系统中安装并启用 Docker 服务"
+    fi
+
+    local python_bin
+    python_bin="$(find_python)" || fail "未找到 python3 运行时，无法启动服务"
+
+    cd "${APP_DIR}" || fail "无法进入应用目录：${APP_DIR}"
+
+    log_msg "starting: python=${python_bin} port=${PORT}"
+    nohup "${python_bin}" "${SERVER}" \
+        --port "${PORT}" \
+        --static "${STATIC_DIR}" \
+        --data "${DATA_DIR}" \
+        >> "${LOG_FILE}" 2>&1 &
+
+    local pid=$!
+    echo "${pid}" > "${PID_FILE}"
+
+    local i
+    for i in $(seq 1 40); do
+        if ! kill -0 "${pid}" 2>/dev/null; then
+            rm -f "${PID_FILE}"
+            fail "服务启动后立即退出，请查看日志：${LOG_FILE}"
+        fi
+        if port_open; then
+            log_msg "service ready on port ${PORT} (pid=${pid})"
+            return 0
+        fi
+        sleep 0.5
+    done
+
+    fail "服务启动超时，端口 ${PORT} 无响应"
+}
+
+stop_app() {
+    if ! is_running; then
+        rm -f "${PID_FILE}"
+        log_msg "service not running"
+        return 0
+    fi
+
+    local pid
+    pid="$(tr -d '[:space:]' < "${PID_FILE}")"
+    log_msg "stopping pid=${pid}"
+    kill -TERM "${pid}" 2>/dev/null
+
+    local i
+    for i in $(seq 1 20); do
+        kill -0 "${pid}" 2>/dev/null || break
+        sleep 0.5
+    done
+
+    if kill -0 "${pid}" 2>/dev/null; then
+        log_msg "force kill pid=${pid}"
+        kill -KILL "${pid}" 2>/dev/null
+    fi
+
+    rm -f "${PID_FILE}"
+    return 0
+}
+
+case "$1" in
+    start)
+        start_app
+        ;;
+    stop)
+        stop_app
+        ;;
+    status)
+        if is_running; then
+            exit 0
+        fi
+        exit 3
+        ;;
+    *)
+        exit 1
+        ;;
+esac

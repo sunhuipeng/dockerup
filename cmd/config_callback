@@ -1,0 +1,9 @@
+#!/bin/bash
+# 应用配置变更后：重新启动服务
+
+DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -x "${DIR}/main" ]; then
+    "${DIR}/main" start >/dev/null 2>&1
+fi
+
+exit 0

@@ -1,0 +1,36 @@
+#!/bin/bash
+# 安装完成后：初始化配置文件，并尝试自动探测 Docker 项目根目录
+
+DATA_DIR="${TRIM_PKGVAR:-/var/apps/dockerup/var}"
+SETTINGS="${DATA_DIR}/settings.json"
+
+mkdir -p "${DATA_DIR}" 2>/dev/null
+
+if [ -f "${SETTINGS}" ]; then
+    # 已存在（如覆盖安装），保留用户配置
+    exit 0
+fi
+
+DETECT=""
+for vol in /vol1 /vol2 /vol3 /vol4 /vol5 /vol6 /vol7 /vol8; do
+    [ -d "${vol}" ] || continue
+    for dir in "${vol}"/*/docker; do
+        [ -d "${dir}" ] || continue
+        hit="$(find "${dir}" -maxdepth 2 -type f \
+            \( -name 'docker-compose.yml' -o -name 'docker-compose.yaml' \
+               -o -name 'compose.yml' -o -name 'compose.yaml' \) \
+            -print -quit 2>/dev/null)"
+        if [ -n "${hit}" ]; then
+            DETECT="${dir}"
+            break 2
+        fi
+    done
+done
+
+if [ -z "${DETECT}" ]; then
+    DETECT="/vol1/1000/docker"
+fi
+
+printf '{\n  "base_path": "%s",\n  "confirm_stop": true\n}\n' "${DETECT}" > "${SETTINGS}"
+
+exit 0

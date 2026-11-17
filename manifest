@@ -1,0 +1,15 @@
+appname               = dockerup
+version               = 1.0.5
+display_name          = 服务管理
+desc                  = 可视化管理 fnOS 上的 Docker Compose 项目：自动扫描项目目录、展示容器运行状态，一键执行「停止 → 拉取最新镜像 → 重新启动」的升级流程。<br>支持单项目升级、批量升级、启停重启与容器日志查看，执行过程实时输出。
+platform              = all
+source                = thirdparty
+maintainer            = shp
+distributor           = shp
+os_min_version        = 0.9.0
+desktop_uidir         = ui
+desktop_applaunchname = dockerup.Application
+service_port          = 39190
+checkport             = true
+ctl_stop              = true
+changelog             = 1.0.5 项目卡片按运行时长排序：运行中的在前（时间短的优先），未运行的统一排后面；1.0.4 时长文案中文化；1.0.3 修复同名容器冲突；1.0.0 首个版本。

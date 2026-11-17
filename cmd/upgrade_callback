@@ -1,0 +1,18 @@
+#!/bin/bash
+# 升级后：确保配置文件存在，并重新拉起服务
+
+DATA_DIR="${TRIM_PKGVAR:-/var/apps/dockerup/var}"
+SETTINGS="${DATA_DIR}/settings.json"
+
+mkdir -p "${DATA_DIR}" 2>/dev/null
+
+if [ ! -f "${SETTINGS}" ]; then
+    printf '{\n  "base_path": "/vol1/1000/docker",\n  "confirm_stop": true\n}\n' > "${SETTINGS}"
+fi
+
+DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -x "${DIR}/main" ]; then
+    "${DIR}/main" start >/dev/null 2>&1
+fi
+
+exit 0

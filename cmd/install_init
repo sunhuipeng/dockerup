@@ -1,0 +1,23 @@
+#!/bin/bash
+# 安装前环境检查：必须存在 docker 与 docker compose，且存在 python3
+
+fail() {
+    if [ -n "${TRIM_TEMP_LOGFILE}" ]; then
+        echo "$1" > "${TRIM_TEMP_LOGFILE}"
+    fi
+    exit 1
+}
+
+if ! command -v docker >/dev/null 2>&1; then
+    fail "未检测到 Docker。请先在「应用中心」安装并启用 Docker 后重试。"
+fi
+
+if ! docker compose version >/dev/null 2>&1 && ! command -v docker-compose >/dev/null 2>&1; then
+    fail "未检测到 docker compose。请确认 Docker 版本已包含 Compose V2 插件。"
+fi
+
+if ! command -v python3 >/dev/null 2>&1 && [ ! -x /usr/bin/python3 ]; then
+    fail "系统缺少 python3 运行时，无法安装本应用。"
+fi
+
+exit 0
