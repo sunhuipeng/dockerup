@@ -19,7 +19,7 @@ import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
 
-APP_VERSION = "1.0.5"
+APP_VERSION = "1.0.6"
 
 # 与原始 shell 脚本保持一致的 compose 文件探测顺序
 COMPOSE_CANDIDATES = [
@@ -928,7 +928,12 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 tail = 200
             tail = max(10, min(2000, tail))
-            return self._json(self._logs(name, tail))
+            container = (query.get("container") or [""])[0]
+            return self._json(self._logs(name, tail, container))
+
+        if path == "/api/compose":
+            name = (query.get("project") or [""])[0]
+            return self._json(self._compose_content(name))
 
         if path == "/api/health":
             return self._json({"ok": True, "version": APP_VERSION})
@@ -991,7 +996,7 @@ class Handler(BaseHTTPRequestHandler):
             "server_time": now_str(),
         }
 
-    def _logs(self, project_name, tail):
+    def _logs(self, project_name, tail, container=""):
         ctx = self.ctx
         project_dir, err = resolve_project(ctx.settings.get("base_path"), project_name)
         if err:
@@ -999,6 +1004,20 @@ class Handler(BaseHTTPRequestHandler):
         compose_path, compose_name = find_compose_file(project_dir)
         if not compose_path:
             return {"ok": False, "error": "未找到 compose 文件"}
+
+        # 指定了容器：直接用 docker logs 读取（对 compose 管理和外部创建的容器都有效）
+        if container:
+            if not re.match(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$", container):
+                return {"ok": False, "error": "容器名无效"}
+            docker_bin = shutil.which("docker") or "/usr/bin/docker"
+            rc, out, err_text = run_cmd(
+                [docker_bin, "logs", "--tail", str(tail), container], timeout=40
+            )
+            if rc != 0:
+                return {"ok": False, "error": (err_text or out or "读取日志失败")[:300]}
+            combined = "\n".join(x for x in (out, err_text) if x)
+            return {"ok": True, "logs": combined[-200000:] or "（暂无日志输出）"}
+
         cmd = ctx.docker.command(["-f", compose_name, "logs", "--tail", str(tail), "--no-color"])
         if not cmd:
             return {"ok": False, "error": "docker compose 不可用"}
@@ -1006,6 +1025,25 @@ class Handler(BaseHTTPRequestHandler):
         if rc != 0:
             return {"ok": False, "error": (err_text or "读取日志失败")[:300]}
         return {"ok": True, "logs": out[-200000:]}
+
+    def _compose_content(self, project_name):
+        """读取项目的 compose 配置文件内容，仅展示不执行。"""
+        ctx = self.ctx
+        project_dir, err = resolve_project(ctx.settings.get("base_path"), project_name)
+        if err:
+            return {"ok": False, "error": err}
+        compose_path, compose_name = find_compose_file(project_dir)
+        if not compose_path:
+            return {"ok": False, "error": "未找到 compose 文件"}
+        try:
+            size = os.path.getsize(compose_path)
+            if size > 512 * 1024:
+                return {"ok": False, "error": "compose 文件过大（%d KB），不予展示" % (size // 1024)}
+            with open(compose_path, "r", encoding="utf-8", errors="replace") as fh:
+                content = fh.read()
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": "读取失败: %s" % exc}
+        return {"ok": True, "file": compose_name, "path": compose_path, "content": content}
 
     def _detect_base_paths(self):
         """在常见位置寻找 docker 项目目录，方便用户第一次配置。"""

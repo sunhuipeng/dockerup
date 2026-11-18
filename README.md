@@ -40,8 +40,12 @@
 
 ```bash
 cd dockerup
-fnpack build
+npm run build      # 优先使用项目内 .tools/fnpack（已下载），否则用系统 PATH 中的 fnpack
 ```
+
+`fnpack` 官方下载地址格式为 `https://static2.fnnas.com/fnpack/fnpack-1.2.3-{os}-{arch}`
+（如 `darwin-arm64`、`linux-amd64`）。换机器时下载对应版本放到 `.tools/fnpack` 并赋予可执行权限即可，
+或直接安装到系统 PATH。项目内 `.tools/` 和 `*.fpk` 均已加入 `.gitignore`。
 
 ## 目录结构
 

@@ -13,6 +13,8 @@
     taskTimer: null,
     taskTitle: "",
     logsProject: "",
+    logsContainer: "",
+    ymlProject: "",
     autoTimer: null,
     busy: {}
   };
@@ -289,6 +291,8 @@
       }
       actions += '<button class="btn btn-ghost btn-sm" data-act="restart" data-project="' + esc(p.name) + '"' +
         (busy ? " disabled" : "") + ">重启</button>";
+      actions += '<button class="btn btn-ghost btn-sm" data-act="yml" data-project="' + esc(p.name) +
+        '" title="查看 compose 配置文件">YML</button>';
       actions += '<span class="spacer"></span>';
       actions += '<button class="btn btn-ghost btn-sm" data-act="logs" data-project="' + esc(p.name) + '">日志</button>';
     } else {
@@ -407,6 +411,7 @@
 
     if (act === "open-settings") return openSettings();
     if (act === "logs") return openLogs(project);
+    if (act === "yml") return openYml(project);
     if (act === "down") {
       confirmDialog("停止项目", "将执行 docker compose down，停止并移除「" + project +
         "」的所有容器（不会删除数据卷）。确定继续？").then(function (yes) {
@@ -534,10 +539,41 @@
 
   /* ---------------- 日志对话框 ---------------- */
 
+  function findProject(name) {
+    var projects = state.boot && state.boot.scan ? state.boot.scan.projects || [] : [];
+    for (var i = 0; i < projects.length; i++) {
+      if (projects[i].name === name) return projects[i];
+    }
+    return null;
+  }
+
   function openLogs(project) {
     state.logsProject = project;
-    $("logsTitle").textContent = project + " · 最近日志";
+    state.logsContainer = "";
+    $("logsTitle").textContent = project + " · 容器日志";
     $("logsContent").textContent = "加载中…";
+
+    // 多容器时显示选择器，让用户挑要看哪个容器的日志
+    var p = findProject(project);
+    var containers = (p && p.containers) || [];
+    var picker = $("logsPicker");
+    var select = $("logsContainer");
+
+    if (containers.length > 1) {
+      select.innerHTML = containers.map(function (c) {
+        var value = c.name || c.service;
+        var label = c.name || c.service;
+        var stateText = c.state === "running" ? "运行中" : (STATE_TEXT[c.state] || c.state || "");
+        return '<option value="' + esc(value) + '">' +
+          esc(label) + (stateText ? "（" + stateText + "）" : "") + "</option>";
+      }).join("");
+      state.logsContainer = select.value || "";
+      picker.hidden = false;
+    } else {
+      select.innerHTML = "";
+      picker.hidden = true;
+    }
+
     showModal("logsModal");
     fetchLogs();
   }
@@ -545,12 +581,42 @@
   function fetchLogs() {
     if (!state.logsProject) return;
     $("logsContent").textContent = "加载中…";
-    request("api/logs?project=" + encodeURIComponent(state.logsProject) + "&tail=300")
+    var url = "api/logs?project=" + encodeURIComponent(state.logsProject) + "&tail=300";
+    if (state.logsContainer) {
+      url += "&container=" + encodeURIComponent(state.logsContainer);
+    }
+    request(url)
       .then(function (data) {
         $("logsContent").textContent = data.logs && data.logs.trim() ? data.logs : "（暂无日志输出）";
       })
       .catch(function (err) {
         $("logsContent").textContent = "读取失败：" + err.message;
+      });
+  }
+
+  /* ---------------- Compose 配置查看 ---------------- */
+
+  function openYml(project) {
+    state.ymlProject = project;
+    $("ymlTitle").textContent = project + " · Compose 配置";
+    $("ymlContent").textContent = "加载中…";
+    $("ymlPath").textContent = "";
+    showModal("ymlModal");
+    fetchYml();
+  }
+
+  function fetchYml() {
+    if (!state.ymlProject) return;
+    $("ymlContent").textContent = "加载中…";
+    request("api/compose?project=" + encodeURIComponent(state.ymlProject))
+      .then(function (data) {
+        $("ymlTitle").textContent = state.ymlProject + " · " + (data.file || "compose 配置");
+        $("ymlPath").textContent = data.path || "";
+        $("ymlContent").textContent = data.content && data.content.trim() ? data.content : "（文件为空）";
+      })
+      .catch(function (err) {
+        $("ymlContent").textContent = "读取失败：" + err.message;
+        $("ymlPath").textContent = "";
       });
   }
 
@@ -641,6 +707,16 @@
     $("btnUpgradeAll").addEventListener("click", upgradeAll);
     $("btnSaveSettings").addEventListener("click", saveSettings);
     $("btnReloadLogs").addEventListener("click", fetchLogs);
+    $("logsContainer").addEventListener("change", function (e) {
+      state.logsContainer = e.target.value;
+      fetchLogs();
+    });
+    $("btnCopyYml").addEventListener("click", function () {
+      var text = $("ymlContent").textContent;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { toast("内容已复制", "ok"); });
+      }
+    });
     $("confirmOk").addEventListener("click", function () { resolveConfirm(true); });
 
     $("searchInput").addEventListener("input", function (e) {
@@ -673,7 +749,7 @@
     });
 
     // 点击遮罩关闭
-    ["settingsModal", "logsModal", "confirmModal"].forEach(function (id) {
+    ["settingsModal", "logsModal", "ymlModal", "confirmModal"].forEach(function (id) {
       $(id).addEventListener("click", function (e) {
         if (e.target === $(id)) {
           if (id === "confirmModal") resolveConfirm(false);
@@ -687,6 +763,7 @@
         if (!$("confirmModal").hidden) return resolveConfirm(false);
         if (!$("settingsModal").hidden) return hideModal("settingsModal");
         if (!$("logsModal").hidden) return hideModal("logsModal");
+        if (!$("ymlModal").hidden) return hideModal("ymlModal");
         if (!$("taskDrawer").hidden) $("taskDrawer").hidden = true;
       }
     });

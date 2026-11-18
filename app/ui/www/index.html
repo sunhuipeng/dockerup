@@ -116,12 +116,35 @@
       <h2 id="logsTitle">容器日志</h2>
       <button class="icon-btn" data-close="logsModal">×</button>
     </div>
+    <div class="logs-picker" id="logsPicker" hidden>
+      <label for="logsContainer">选择容器</label>
+      <select id="logsContainer"></select>
+    </div>
     <div class="modal-body modal-body-flush">
       <pre class="terminal terminal-light" id="logsContent">加载中…</pre>
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" data-close="logsModal">关闭</button>
       <button class="btn btn-ghost" id="btnReloadLogs">重新加载</button>
+    </div>
+  </div>
+</div>
+
+<!-- Compose 配置对话框 -->
+<div class="overlay" id="ymlModal" hidden>
+  <div class="modal modal-wide">
+    <div class="modal-head">
+      <h2 id="ymlTitle">Compose 配置</h2>
+      <button class="icon-btn" data-close="ymlModal">×</button>
+    </div>
+    <div class="modal-body modal-body-flush">
+      <pre class="terminal terminal-light" id="ymlContent">加载中…</pre>
+    </div>
+    <div class="modal-foot">
+      <span class="modal-hint" id="ymlPath"></span>
+      <span class="spacer"></span>
+      <button class="btn btn-ghost" data-close="ymlModal">关闭</button>
+      <button class="btn btn-ghost" id="btnCopyYml">复制内容</button>
     </div>
   </div>
 </div>

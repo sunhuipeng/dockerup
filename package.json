@@ -1,0 +1,10 @@
+{
+  "name": "dockerup",
+  "version": "1.0.6",
+  "private": true,
+  "description": "飞牛 fnOS 服务管理应用（Docker Compose 项目管理）",
+  "scripts": {
+    "build": "sh -c 'if [ -x ./.tools/fnpack ]; then ./.tools/fnpack build; else fnpack build; fi'",
+    "setup:fnpack": "mkdir -p .tools && curl -fL -o .tools/fnpack https://static2.fnnas.com/fnpack/fnpack-1.2.3-darwin-arm64 && chmod +x .tools/fnpack"
+  }
+}

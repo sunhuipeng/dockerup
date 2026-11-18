@@ -1,1 +1,4 @@
 .DS_Store
+.tools/
+*.fpk
+__pycache__/
