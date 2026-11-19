@@ -1,6 +1,6 @@
 {
   "name": "dockerup",
-  "version": "1.0.6",
+  "version": "1.0.8",
   "private": true,
   "description": "飞牛 fnOS 服务管理应用（Docker Compose 项目管理）",
   "scripts": {

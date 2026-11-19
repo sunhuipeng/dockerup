@@ -19,7 +19,7 @@ import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
 
-APP_VERSION = "1.0.6"
+APP_VERSION = "1.0.8"
 
 # 与原始 shell 脚本保持一致的 compose 文件探测顺序
 COMPOSE_CANDIDATES = [
@@ -570,6 +570,55 @@ class TaskManager(object):
         thread.start()
         return task, None
 
+    def start_prune(self, image=True, container=False):
+        """全局清理任务：悬空镜像 / 已停止容器，结果写进任务日志。"""
+        with self.lock:
+            if self.running_dirs:
+                return None, "有项目操作正在进行，请稍候再清理"
+
+        docker_bin = shutil.which("docker") or "/usr/bin/docker"
+        if not os.path.exists(docker_bin) and not shutil.which("docker"):
+            return None, "未检测到 Docker"
+
+        task = Task("清理无用资源", action="prune")
+        self._register(task)
+        thread = threading.Thread(
+            target=self._run_prune,
+            args=(task, docker_bin, bool(image), bool(container)),
+            daemon=True,
+        )
+        thread.start()
+        return task, None
+
+    def _run_prune(self, task, docker_bin, image, container):
+        ok = True
+        try:
+            if image:
+                task.add("▶ 清理悬空镜像  ($ docker image prune -f)", "head")
+                code, _ = self._stream(task, [docker_bin, "image", "prune", "-f"], None)
+                if code != 0:
+                    ok = False
+                    task.add("✗ 悬空镜像清理失败，退出码 %s" % code, "err")
+                else:
+                    task.add("✓ 悬空镜像清理完成", "ok")
+                task.add("")
+
+            if container:
+                task.add("▶ 清理已停止容器  ($ docker container prune -f)", "head")
+                code, _ = self._stream(task, [docker_bin, "container", "prune", "-f"], None)
+                if code != 0:
+                    ok = False
+                    task.add("✗ 已停止容器清理失败，退出码 %s" % code, "err")
+                else:
+                    task.add("✓ 已停止容器清理完成", "ok")
+                task.add("")
+
+            task.add("清理完成" if ok else "清理未完全成功，请查看上面的输出", "ok" if ok else "warn")
+            task.finish(ok, 0 if ok else 1)
+        except Exception as exc:  # noqa: BLE001
+            task.add("清理异常: %s" % exc, "err")
+            task.finish(False, 1)
+
     def start_many(self, projects, action):
         """批量执行：生成一个总任务，串行处理多个项目。"""
         if action not in ACTION_STEPS:
@@ -670,6 +719,17 @@ class TaskManager(object):
                 task.add("操作中断于「%s」步骤" % step_names[step], "err")
                 return False
             task.add("✓ %s 完成" % step_names[step], "ok")
+            task.add("")
+
+        # 升级完成后自动清理悬空镜像（旧版本镜像），失败只警告，不影响升级结果
+        if action == "upgrade":
+            docker_bin = shutil.which("docker") or "/usr/bin/docker"
+            task.add("▶ 清理悬空镜像  ($ docker image prune -f)", "head")
+            code, _ = self._stream(task, [docker_bin, "image", "prune", "-f"], None)
+            if code != 0:
+                task.add("⚠ 清理悬空镜像失败（退出码 %s），可稍后手动执行 docker image prune -f" % code, "warn")
+            else:
+                task.add("✓ 悬空镜像清理完成", "ok")
             task.add("")
 
         if action in ("upgrade", "up", "restart"):
@@ -965,6 +1025,14 @@ class Handler(BaseHTTPRequestHandler):
             action = str(body.get("action") or "")
             project = str(body.get("project") or "")
             projects = body.get("projects")
+
+            if action == "prune":
+                task, err = ctx.tasks.start_prune(
+                    bool(body.get("image")), bool(body.get("container"))
+                )
+                if err:
+                    return self._error(err)
+                return self._json({"ok": True, "task_id": task.id})
 
             if isinstance(projects, list) and projects:
                 names = [str(p) for p in projects][:200]

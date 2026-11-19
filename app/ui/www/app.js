@@ -594,6 +594,24 @@
       });
   }
 
+  /* ---------------- 清理无用资源 ---------------- */
+
+  function openPrune() {
+    confirmDialog(
+      "清理已停止容器",
+      "将执行 docker container prune -f，删除所有已停止的容器（包括其他项目的）。\n\n" +
+      "数据卷不会被删除；下次启动项目时 Compose 会重建容器，但容器内的日志和临时状态会丢失。确定继续？"
+    ).then(function (yes) {
+      if (!yes) return;
+      request("api/action", {
+        method: "POST",
+        body: { action: "prune", image: false, container: true }
+      })
+        .then(function (data) { openTask(data.task_id, "清理已停止容器"); })
+        .catch(function (err) { toast(err.message, "err"); });
+    });
+  }
+
   /* ---------------- Compose 配置查看 ---------------- */
 
   function openYml(project) {
@@ -705,6 +723,7 @@
 
     $("btnSettings").addEventListener("click", openSettings);
     $("btnUpgradeAll").addEventListener("click", upgradeAll);
+    $("btnPrune").addEventListener("click", openPrune);
     $("btnSaveSettings").addEventListener("click", saveSettings);
     $("btnReloadLogs").addEventListener("click", fetchLogs);
     $("logsContainer").addEventListener("change", function (e) {
